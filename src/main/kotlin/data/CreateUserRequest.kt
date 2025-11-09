@@ -1,0 +1,10 @@
+package com.perpheads.files.data
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer
+
+class CreateUserRequest(
+    val name: String,
+    @JsonSerialize(using = ToStringSerializer::class)
+    val communityId: Long
+)

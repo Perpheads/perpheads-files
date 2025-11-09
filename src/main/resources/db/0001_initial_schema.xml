@@ -1,0 +1,86 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext
+    https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+    http://www.liquibase.org/xml/ns/dbchangelog
+    https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="1" author="Fredy">
+        <createTable tableName="user">
+            <column name="user_id" type="int" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="community_id" type="bigint">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="name" type="varchar(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="api_key" type="varchar(128)">
+                <constraints unique="true"/>
+            </column>
+            <column name="admin" type="boolean" defaultValueBoolean="false"/>
+        </createTable>
+        <createTable tableName="cookie">
+            <column name="token" type="varchar(64)">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="user_id" type="int">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expiry_date" type="DATETIME">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="cookie" baseColumnNames="user_id"
+                                 constraintName="fk_cookie_user" referencedTableName="user"
+                                 referencedColumnNames="user_id" onDelete="CASCADE" onUpdate="CASCADE"/>
+        <createTable tableName="file">
+            <column name="file_id" type="int" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="user_id" type="int">
+                <constraints nullable="false"/>
+            </column>
+            <column name="link" type="varchar(21)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="filename" type="varchar(260)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="mime_type" type="varchar(255)"/>
+            <column name="upload_date" type="DATETIME" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="uploaded" type="boolean" defaultValueBoolean="false"/>
+            <column name="size" type="bigint" defaultValue="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="file" baseColumnNames="user_id"
+                                 constraintName="fk_file_user" referencedTableName="user"
+                                 referencedColumnNames="user_id" onDelete="RESTRICT" onUpdate="CASCADE"/>
+        <createTable tableName="file_thumbnail">
+            <column name="file_id" type="int">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="thumbnail" type="bytea">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="file_thumbnail" baseColumnNames="file_id"
+                                 constraintName="fk_thumbnail_file" referencedTableName="file"
+                                 referencedColumnNames="file_id" onDelete="CASCADE" onUpdate="CASCADE"/>
+    </changeSet>
+    <changeSet id="2" author="Fredy">
+        <createTable tableName="file_cache">
+            <column name="file_id" type="int">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="last_used" type="DATETIME" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>
