@@ -62,7 +62,6 @@ class ShareController(
                         if (em.isCancelled) {
                             throw NonPropagatingCancellationException()
                         }
-                        delay(500)
                         em.emit(item)
                     }
                     em.complete()
