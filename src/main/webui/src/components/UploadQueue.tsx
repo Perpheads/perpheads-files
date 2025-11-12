@@ -9,7 +9,7 @@ import {
     ListItemText,
     useTheme
 } from "@mui/material";
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 
 export interface QueuedUpload {
@@ -27,12 +27,18 @@ export interface UploadQueueEntryProps {
 export const UploadQueueEntry = (props: UploadQueueEntryProps) => {
     const filename = props.file.name
     const [progress, setProgress] = useState<number>(0)
-    const [error, setError] = useState<string | null>(null)
+
+    const shouldStart = props.shouldStart
+    const file = props.file
+    const onCompletedRef = useRef(props.onCompleted)
+    useEffect(() => {
+        onCompletedRef.current = props.onCompleted
+    }, [props.onCompleted])
 
     useEffect(() => {
-        if (!props.shouldStart) return
+        if (!shouldStart) return
         const form = new FormData()
-        form.append("file", props.file)
+        form.append("file", file)
 
         const xhr = new XMLHttpRequest()
         xhr.open("POST", "/upload", true)
@@ -47,21 +53,18 @@ export const UploadQueueEntry = (props: UploadQueueEntryProps) => {
         xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 setProgress(1)
-                props.onCompleted(true)
-            } else {
-                setError("Upload failed")
+                onCompletedRef.current(true)
             }
         }
         xhr.onerror = () => {
-            props.onCompleted(false)
-            setError("network error")
+            onCompletedRef.current(false)
         }
         xhr.send(form)
 
         return () => {
             xhr.abort()
         }
-    }, [props.file, props.shouldStart])
+    }, [shouldStart, file])
 
     return <ListItemText primary={filename}
                          secondary={<LinearProgress
