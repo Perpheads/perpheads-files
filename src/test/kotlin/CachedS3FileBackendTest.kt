@@ -17,10 +17,12 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.slot
+import io.vertx.mutiny.core.buffer.Buffer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -79,7 +81,7 @@ class CachedS3FileBackendTest : WordSpec({
         } coAnswers {
             every {
                 diskBackend.getFileFlow(file)
-            } returns flowSlot.captured
+            } returns flowSlot.captured.map { Buffer.buffer(it) }
         }
 
         coEvery {
@@ -91,7 +93,7 @@ class CachedS3FileBackendTest : WordSpec({
         } coAnswers {
             coEvery {
                 diskBackend.getFileFlow(file)
-            } returns dummyArrays.asFlow()
+            } returns dummyArrays.asFlow().map { Buffer.buffer(it) }
             dummyArrays.asFlow()
         }
     }

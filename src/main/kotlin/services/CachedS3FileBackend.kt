@@ -7,6 +7,7 @@ import io.quarkus.runtime.ShutdownEvent
 import io.quarkus.runtime.StartupEvent
 import io.quarkus.scheduler.Scheduled
 import io.smallrye.mutiny.Uni
+import io.vertx.mutiny.core.buffer.Buffer
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.ws.rs.InternalServerErrorException
@@ -109,6 +110,7 @@ class CachedS3FileBackend(
     private val currentCache: ConcurrentHashMap<Int, Entry> = ConcurrentHashMap()
 
     private class EntryAccess(val entry: Entry, val stateWhenAccessed: FileState)
+
     private suspend inline fun getOrCreateEntryAndRunWithState(fileData: FileData, f: Entry.() -> Unit): EntryAccess {
         val computedEntry = currentCache.computeIfAbsent(fileData.fileId) {
             Entry(fileData, Instant.now())
@@ -132,15 +134,18 @@ class CachedS3FileBackend(
                         this.removeFromCache()
                         return
                     }
+
                     FileState.EVICTED -> {
                         LOG.info("Attempting to evict ${fileData.link} but it was already evicted by someone else")
                         // Someone else already finished evicting, we are done
                         this.removeFromCache()
                         return
                     }
+
                     FileState.DOWNLOADING -> {
                         // Waiting for download to finish
                     }
+
                     FileState.ERROR, FileState.IN_CACHE, FileState.EVICTING, FileState.EVICTING_DOWNLOADS_COMPLETED -> {
                         if (readCount == 0) {
                             LOG.info("File ${fileData.link} is not being read anymore so it can be safely evicted")
@@ -212,7 +217,7 @@ class CachedS3FileBackend(
         }
     }
 
-    override fun getFileFlow(data: FileData): Flow<ByteArray> = flow {
+    override fun getFileFlow(data: FileData, start: Long, end: Long): Flow<Buffer> = flow {
         loop@ while (true) {
             val access = getOrCreateEntryAndRunWithState(data) {
                 when (state) {
@@ -223,6 +228,7 @@ class CachedS3FileBackend(
                             this@getOrCreateEntryAndRunWithState.doDownload()
                         }
                     }
+
                     FileState.IN_CACHE -> {
                         // Incrementing this ensures that we are protected and can read.
                         // Note: It is important that the `readCount` is always decremented after this.
@@ -235,12 +241,14 @@ class CachedS3FileBackend(
                         lastUsed = Instant.now()
                         readCount++
                     }
+
                     FileState.ERROR -> throw InternalServerErrorException("File could not be downloaded!")
                     FileState.EVICTED -> {
                         // The entry was already evicted, we can retry immediately with a new entry
                         this.removeFromCache()
                         continue@loop
                     }
+
                     else -> {
                         // We wait for someone else to change the state
                     }
@@ -255,7 +263,7 @@ class CachedS3FileBackend(
             // The file was in cache and can be accessed. Start the download
             try {
                 LOG.debug("Emitting data for ${data.link} from disk cache")
-                emitAll(diskBackend.getFileFlow(data))
+                emitAll(diskBackend.getFileFlow(data, start, end))
                 return@flow
             } finally {
                 // We launch this in a different scope so it absolutely 100% cannot be canceled, to avoid deadlocks.
