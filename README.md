@@ -1,67 +1,98 @@
-# perpheads-files
+# Perpheads Files
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+A very basic [ShareX](https://getsharex.com/) target for uploading images/files that also
+supports sharing files in a P2P fashion similar to [JustBeamIt](https://justbeamit.com/).
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+Perpheads Files is written in Kotlin and Typescript, using [Quarkus](https://quarkus.io/) as the
+web server and Restful API, and Typescript for React as a single page application.
 
-## Running the application in dev mode
+Users are authenticated without password using Steam authentication.
 
-You can run your application in dev mode that enables live coding using:
+[![build](https://github.com/Perpheads/perpheads-files/actions/workflows/build.yml/badge.svg)](https://github.com/Perpheads/perpheads-files/actions/workflows/build.yml)
 
-```shell script
-./gradlew quarkusDev
-```
+## How to deploy
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+The application is built as a docker container.
+You can find prebuilt containers in the docker registry
+of this repository.
 
-## Packaging and running the application
+The following environment variables can be set to configure the
+settings of the docker container.
 
-The application can be packaged using:
+Please note that this application uses http rather than https and is expected
+to be run behind a reverse proxy that does TLS termination (For example nginx).
 
-```shell script
-./gradlew build
-```
+The files are stored locally in the docker container (by default in the ``files`` sub-directory).
+If you want to persist the uploaded files, create a volume at that path.
 
-It produces the `quarkus-run.jar` file in the `build/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `build/quarkus-app/lib/` directory.
+You can view sample [docker-compose.yml](docker-compose.sample.yml) that easily bootstraps all of the
+services required for running Perpheads Files in production.
 
-The application is now runnable using `java -jar build/quarkus-app/quarkus-run.jar`.
+### Environment Variables
 
-If you want to build an _über-jar_, execute the following command:
+These are the environment variables that you will either need to pass or define in a local `.env` file.
 
-```shell script
-./gradlew build -Dquarkus.package.jar.type=uber-jar
-```
+#### Database Settings
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar build/*-runner.jar`.
+| Environment Variable        | Description                                                                            |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| QUARKUS_DATASOURCE_JDBC_URL | JDBC URL to connect to the database, for example `jdbc:postgresql://localhost/phfiles` |
+| QUARKUS_DATASOURCE_USERNAME | Username to connect to the database                                                    |
+| QUARKUS_DATASOURCE_PASSWORD | Password of the database user                                                          |
 
-## Creating a native executable
+#### S3 settings
 
-You can create a native executable using:
+| Environment Variable | Description                                     |
+|----------------------|-------------------------------------------------|
+| S3_BUCKET_ENDPOINT   | The domain set on the authentication cookie     |
+| S3_BUCKET_ACCESS_KEY | If the cookie may only be transmitted via HTTPS |
+| S3_BUCKET_SECRET_KEY | If the cookie may only be transmitted via HTTPS |
+| S3_BUCKET_NAME       | If the cookie may only be transmitted via HTTPS |
 
-```shell script
-./gradlew build -Dquarkus.native.enabled=true
-```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
 
-```shell script
-./gradlew build -Dquarkus.native.enabled=true -Dquarkus.native.container-build=true
-```
+## Development
 
-You can then execute your native executable with: `./build/perpheads-files-1.0-SNAPSHOT-runner`
+### Requirements
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/gradle-tooling>.
+- IntelliJ IDE or Gradle
+- PostgreSQL as a database
+- JDK 21+
 
-## Related Guides
+This project uses [Jooq](https://www.jooq.org/) in combination
+with [Liquibase](https://www.liquibase.com/) to migrate an existing
+database and automatically generate
+a typesafe Java API for accessing the database.
 
-- REST ([guide](https://quarkus.io/guides/rest)): A Jakarta REST implementation utilizing build time processing and
-  Vert.x. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on
-  it.
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus
-  REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
-- Kotlin ([guide](https://quarkus.io/guides/kotlin)): Write your services in Kotlin
-- Liquibase ([guide](https://quarkus.io/guides/liquibase)): Handle your database schema migrations with Liquibase
-- JDBC Driver - PostgreSQL ([guide](https://quarkus.io/guides/datasource)): Connect to the PostgreSQL database via JDBC
-- Amazon S3 ([guide](https://docs.quarkiverse.io/quarkus-amazon-services/dev/amazon-s3.html)): Connect to Amazon S3
-  cloud storage
+This implies that for syntax highlighting to work properly in the
+DAOs, you will have to first run the application successfully using gradle.
+
+
+### Gradle configuration
+
+You need two configurations to run the serer and the client. The client configuration has a continuous build feature that
+can automatically detect changes and rebuilds the project similar to how node works.
+
+#### Server
+
+In IntelliJ, you can either use the existing Quarkus plugin to run the application, or simply run the ``:quarkusDev`` Gradle task. 
+
+If all environment variables are filled in correctly, the database should automatically be migrated upon running
+the configuration. Jooq should generate all of its files and the server should start
+and respond at port 8080.
+
+
+### Creating an initial admin user
+
+Unfortunately, there is no easy way to create the first admin user yet and
+it has to be done manually through the database by inserting a record into the `user` table.
+
+Authentication is done via Steam, 
+
+### Use with ShareX
+
+After logging in, press the three dots in the top right and select
+```Get API Key```. From here you can copy the ShareX config
+that can be used in ShareX's custom uploader settings.
+Don't forget to also change the upload targets to
+your custom uploader, after importing it.
