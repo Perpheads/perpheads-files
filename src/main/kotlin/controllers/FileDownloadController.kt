@@ -59,7 +59,7 @@ class FileDownloadController(
     }
 
     private fun getCacheHeader(): String =
-        "public, max-age=${Duration.ofDays(30).seconds.toInt()}, immutable"
+        "private, max-age=${Duration.ofDays(30).seconds.toInt()}, immutable"
 
     private fun FileData.getHeaders(rangeHeader: String?): Map<String, String> = buildMap {
         val range = getRangeHeaderRange(rangeHeader)
