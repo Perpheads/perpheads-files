@@ -47,7 +47,7 @@ export const StatisticsPage = (props: StatisticsPageProps) => {
                 <>
                     <Typography variant="h5" gutterBottom>Overall Statistics</Typography>
                     <Typography variant="body1">{`Total file count: ${statistics.data.overallStatistics.fileCount}`}</Typography>
-                    <Typography variant="body1">{`Total storage used: ${humanReadableByteSize(statistics.data.overallStatistics.fileCount)}`}</Typography>
+                    <Typography variant="body1">{`Total storage used: ${humanReadableByteSize(statistics.data.overallStatistics.storageUsed)}`}</Typography>
                     <Divider sx={{marginTop: "16px", marginBottom: "16px"}}/>
                     <Typography variant="h5" gutterBottom>User Statistics (Top 100)</Typography>
                     <TableContainer>
