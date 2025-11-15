@@ -42,12 +42,12 @@ These are the environment variables that you will either need to pass or define 
 
 #### S3 settings
 
-| Environment Variable | Description                                     |
-|----------------------|-------------------------------------------------|
-| S3_BUCKET_ENDPOINT   | The domain set on the authentication cookie     |
-| S3_BUCKET_ACCESS_KEY | If the cookie may only be transmitted via HTTPS |
-| S3_BUCKET_SECRET_KEY | If the cookie may only be transmitted via HTTPS |
-| S3_BUCKET_NAME       | If the cookie may only be transmitted via HTTPS |
+| Environment Variable | Description                                             |
+|----------------------|---------------------------------------------------------|
+| S3_BUCKET_ENDPOINT   | The endpoint of the S3 bucket files will be uploaded to |
+| S3_BUCKET_ACCESS_KEY | The access key of the S3 credentials                    |
+| S3_BUCKET_SECRET_KEY | The secret key of the S3 credentials                    |
+| S3_BUCKET_NAME       | The name of the S3 bucket                               |
 
 
 
