@@ -87,7 +87,6 @@ class FileDownloadController(
     @HEAD
     @Path("/{link:\\w{16}(?:\\.\\w{1,4})?}")
     fun getFileInformation(link: String): Uni<Response> = suspending {
-        println("GETTING FILE INFO")
         val fileData = fileRepository.findByLink(link) ?: throw NotFoundException()
 
         Response.ok()
