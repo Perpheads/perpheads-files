@@ -7,14 +7,11 @@ import io.quarkus.runtime.ShutdownEvent
 import io.quarkus.runtime.StartupEvent
 import io.quarkus.scheduler.Scheduled
 import io.smallrye.mutiny.Uni
-import io.vertx.mutiny.core.buffer.Buffer
+import io.vertx.core.http.HttpServerResponse
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.ws.rs.InternalServerErrorException
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.eclipse.microprofile.config.inject.ConfigProperty
@@ -217,7 +214,7 @@ class CachedS3FileBackend(
         }
     }
 
-    override fun getFileFlow(data: FileData, start: Long, end: Long): Flow<Buffer> = flow {
+    override suspend fun sendFile(data: FileData, start: Long, end: Long, response: HttpServerResponse) {
         loop@ while (true) {
             val access = getOrCreateEntryAndRunWithState(data) {
                 when (state) {
@@ -263,8 +260,8 @@ class CachedS3FileBackend(
             // The file was in cache and can be accessed. Start the download
             try {
                 LOG.debug("Emitting data for ${data.link} from disk cache")
-                emitAll(diskBackend.getFileFlow(data, start, end))
-                return@flow
+                diskBackend.sendFile(data, start, end, response)
+                return
             } finally {
                 // We launch this in a different scope so it absolutely 100% cannot be canceled, to avoid deadlocks.
                 fileCoroutineScope.launch {

@@ -1,40 +1,19 @@
 package com.perpheads.files.controllers
 
-import com.perpheads.files.arcCoroutineScope
-import com.perpheads.files.arcDispatcher
 import com.perpheads.files.data.FileData
 import com.perpheads.files.repository.FileRepository
 import com.perpheads.files.services.CachedS3FileBackend
-import com.perpheads.files.services.FileBackend
 import com.perpheads.files.suspending
-import io.quarkus.arc.Arc
-import io.quarkus.scheduler.kotlin.runtime.ApplicationCoroutineScope
-import io.quarkus.scheduler.kotlin.runtime.VertxDispatcher
-import io.smallrye.mutiny.Multi
+import com.perpheads.files.suspendingVoid
 import io.smallrye.mutiny.Uni
-import io.vertx.core.Vertx
-import io.vertx.mutiny.core.buffer.Buffer
+import io.vertx.core.http.HttpServerResponse
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.ws.rs.GET
-import jakarta.ws.rs.HEAD
-import jakarta.ws.rs.NotFoundException
-import jakarta.ws.rs.Path
-import jakarta.ws.rs.Produces
-import jakarta.ws.rs.core.CacheControl
-import jakarta.ws.rs.core.MediaType
+import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
 import org.jboss.resteasy.reactive.RestHeader
-import org.jboss.resteasy.reactive.RestMulti
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration
-import kotlin.coroutines.cancellation.CancellationException
 
 @ApplicationScoped
 @Path("/")
@@ -42,8 +21,6 @@ class FileDownloadController(
     private val fileRepository: FileRepository,
     private val fileBackend: CachedS3FileBackend,
 ) {
-    private class NonPropagatingCancellationException : CancellationException()
-
     val whitelistedTypes = setOf(
         "image/png",
         "image/jpeg",
@@ -116,46 +93,27 @@ class FileDownloadController(
         link: String,
         @RestHeader("Range")
         rangeHeader: String?,
-    ): RestMulti<Buffer> {
-        class DownloadData(val fileData: FileData, val downloadStream: Flow<Buffer>, val range: LongRange?)
+        response: HttpServerResponse,
+    ): Uni<Void?> = suspendingVoid {
+        val fileData = fileRepository.findByLink(link) ?: throw NotFoundException()
+        val range = fileData.getRangeHeaderRange(rangeHeader)
 
-        return RestMulti.fromUniResponse(suspending {
-            val fileData = fileRepository.findByLink(link) ?: throw NotFoundException()
-            val range = fileData.getRangeHeaderRange(rangeHeader)
-            DownloadData(fileData, fileBackend.getFileFlow(fileData, range?.start ?: 0L, (range?.endInclusive ?: fileData.size)), range)
-        }, { data ->
-            Multi.createFrom().emitter { em ->
-                val job = arcCoroutineScope.launch(arcDispatcher) {
-                    try {
-                        data.downloadStream.collect { item ->
-                            if (em.isCancelled) {
-                                throw NonPropagatingCancellationException()
-                            }
-                            em.emit(item)
-                        }
-                        em.complete()
-                    } catch (th: Throwable) {
-                        when (th) {
-                            is NonPropagatingCancellationException -> em.complete()
-                            else -> em.fail(th)
-                        }
-                    }
-                }
-                em.onTermination {
-                    job.cancel(NonPropagatingCancellationException())
-                }
-            }
-        }, { data ->
-            mutableMapOf(
-                "Content-Length" to listOf(data.fileData.size.toString()),
-                "Content-Type" to listOf(data.fileData.getSafeContentType()),
-                "Accept-Ranges" to listOf("bytes"),
-                "Cache-Control" to listOf(getCacheHeader()),
-                "Content-Disposition" to listOf(data.fileData.getContentDisposition()),
-            )
-        }, { data ->
-            if (data.range != null) 206 else 200
-        })
+        response.putHeader("Content-Length", fileData.size.toString())
+        response.putHeader("Content-Type", fileData.getSafeContentType())
+        rangeHeader?.let {
+            response.putHeader("Content-Range", rangeHeader)
+        }
+        response.putHeader("Accept-Ranges", "bytes")
+        response.putHeader("Cache-Control", getCacheHeader())
+        response.putHeader("Content-Disposition", fileData.getContentDisposition())
+
+        if (rangeHeader != null) {
+            response.statusCode = 206
+        } else {
+            response.statusCode = 200
+        }
+
+        fileBackend.sendFile(fileData, range?.start ?: 0L, (range?.endInclusive ?: fileData.size), response)
     }
 
     @GET

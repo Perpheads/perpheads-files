@@ -2,26 +2,19 @@ package com.perpheads.files.services
 
 import com.perpheads.files.data.FileData
 import io.quarkus.runtime.StartupEvent
-import io.smallrye.mutiny.coroutines.asFlow
-import io.smallrye.mutiny.coroutines.awaitSuspending
-import io.vertx.core.file.OpenOptions
+import io.vertx.core.http.HttpServerResponse
 import io.vertx.mutiny.core.Vertx
-import io.vertx.mutiny.core.buffer.Buffer
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import jakarta.ws.rs.NotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withContext
 import org.eclipse.microprofile.config.inject.ConfigProperty
 import java.io.File
 import java.nio.file.Path
-import kotlin.io.path.createDirectory
-import kotlin.io.path.div
-import kotlin.io.path.exists
-import kotlin.io.path.outputStream
+import kotlin.io.path.*
 
 @ApplicationScoped
 class LocalDiskFileBackend(
@@ -29,10 +22,6 @@ class LocalDiskFileBackend(
     val storagePath: Path,
     private val vertx: Vertx
 ) : FileBackend {
-    companion object {
-        const val BUFFER_SIZE = 32768
-    }
-
     private fun FileData.getTargetPath(): Path {
         return storagePath / link
     }
@@ -66,22 +55,13 @@ class LocalDiskFileBackend(
         }
     }
 
-    override fun getFileFlow(data: FileData, start: Long, end: Long): Flow<Buffer> = flow {
-        val file = data.getTargetPath().toFile()
+    override suspend fun sendFile(data: FileData, start: Long, end: Long, response: HttpServerResponse) {
+        val file = data.getTargetPath()
         if (!file.exists()) throw NotFoundException("File not found: ${data.filename}")
 
-        val asyncFile = vertx.fileSystem()
-            .open(data.getTargetPath().toString(), OpenOptions().setRead(true))
-            .awaitSuspending()
-
-        val bufferFlow = asyncFile
-            .setReadPos(start)
-            .setReadLength(end - start)
-            .toMulti()
-            .onTermination().invoke { asyncFile.close() }
-            .asFlow()
-
-        emitAll(bufferFlow)
+        response.sendFile(file.absolutePathString(), start, end - start)
+            .toCompletionStage()
+            .await()
     }
 
     fun onStart(@Observes startupEvent: StartupEvent) {

@@ -6,33 +6,21 @@ import com.perpheads.files.services.CachedS3FileBackend
 import com.perpheads.files.services.LocalDiskFileBackend
 import com.perpheads.files.services.S3ClientService
 import io.kotest.core.spec.style.WordSpec
-import io.kotest.matchers.shouldBe
-import io.mockk.Runs
-import io.mockk.clearAllMocks
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.confirmVerified
-import io.mockk.every
-import io.mockk.just
-import io.mockk.mockk
-import io.mockk.runs
-import io.mockk.slot
-import io.vertx.mutiny.core.buffer.Buffer
+import io.mockk.*
+import io.vertx.core.http.HttpServerResponse
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import java.time.Instant
-import kotlin.random.Random
 
 @Suppress("UnusedFlow")
 class CachedS3FileBackendTest : WordSpec({
     val diskBackend: LocalDiskFileBackend = mockk()
     val s3ClientService: S3ClientService = mockk()
     val fileCacheRepository: FileCacheRepository = mockk()
+    val httpResponse: HttpServerResponse = mockk()
 
     afterTest {
         clearAllMocks()
@@ -55,10 +43,6 @@ class CachedS3FileBackendTest : WordSpec({
         )
     }
 
-    val dummyArrays = (1..10).map {
-        ByteArray(128).apply { Random.nextBytes(this) }
-    }
-
     var fileCounter = 1
     fun getFileData(size: Long = 1000): FileData = FileData(
         fileId = fileCounter++,
@@ -79,9 +63,9 @@ class CachedS3FileBackendTest : WordSpec({
         coEvery {
             diskBackend.storeFromFlow(file, capture(flowSlot))
         } coAnswers {
-            every {
-                diskBackend.getFileFlow(file)
-            } returns flowSlot.captured.map { Buffer.buffer(it) }
+            coEvery {
+                diskBackend.sendFile(file, any(), any(), httpResponse)
+            } just runs
         }
 
         coEvery {
@@ -92,9 +76,9 @@ class CachedS3FileBackendTest : WordSpec({
             s3ClientService.getFile(file.link)
         } coAnswers {
             coEvery {
-                diskBackend.getFileFlow(file)
-            } returns dummyArrays.asFlow().map { Buffer.buffer(it) }
-            dummyArrays.asFlow()
+                diskBackend.sendFile(file, any(), any(), httpResponse)
+            } just runs
+            flow { ByteArray(4096) }
         }
     }
 
@@ -104,16 +88,31 @@ class CachedS3FileBackendTest : WordSpec({
             val cache = createCache()
 
             downloadFileToCache(file)
-            val returnedFlow = cache.getFileFlow(file)
-
-            returnedFlow.map { it.bytes }.toList() shouldBe dummyArrays
+            cache.sendFile(file, 0, 100, httpResponse)
 
             coVerify(exactly = 1) {
                 s3ClientService.getFile(file.link)
                 diskBackend.storeFromFlow(file, any())
                 fileCacheRepository.addFileToCache(file.fileId)
                 fileCacheRepository.markFileAsUsed(file.fileId)
-                diskBackend.getFileFlow(file)
+                diskBackend.sendFile(file, 0, 100, httpResponse)
+            }
+            confirmVerified()
+        }
+
+        "forward range request cache correctly" {
+            val file = getFileData()
+            val cache = createCache()
+
+            downloadFileToCache(file)
+            cache.sendFile(file, 500, 1000, httpResponse)
+
+            coVerify(exactly = 1) {
+                s3ClientService.getFile(file.link)
+                diskBackend.storeFromFlow(file, any())
+                fileCacheRepository.addFileToCache(file.fileId)
+                fileCacheRepository.markFileAsUsed(file.fileId)
+                diskBackend.sendFile(file, 500, 1000, httpResponse)
             }
             confirmVerified()
         }
@@ -123,13 +122,12 @@ class CachedS3FileBackendTest : WordSpec({
             val cache = createCache()
 
             downloadFileToCache(file)
-            cache.getFileFlow(file).toList()
+            cache.sendFile(file, 0, 1000, httpResponse)
             clearAllMocks(answers = false)
 
-            val returnedFlow = cache.getFileFlow(file)
-            returnedFlow.map { it.bytes }.toList() shouldBe dummyArrays
+            cache.sendFile(file, 0, 1000, httpResponse)
             coVerify(exactly = 1) {
-                diskBackend.getFileFlow(file)
+                diskBackend.sendFile(file, 0, 1000, httpResponse)
                 fileCacheRepository.markFileAsUsed(file.fileId)
             }
             confirmVerified()
@@ -140,7 +138,7 @@ class CachedS3FileBackendTest : WordSpec({
             val cache = createCache()
 
             downloadFileToCache(file)
-            cache.getFileFlow(file).toList()
+            cache.sendFile(file, 0, 1000, httpResponse)
             clearAllMocks(answers = false)
 
             coEvery {
@@ -153,15 +151,14 @@ class CachedS3FileBackendTest : WordSpec({
             cache.evictFromCache(file)
             clearAllMocks(answers = false)
 
-            val returnedFlow = cache.getFileFlow(file)
-            returnedFlow.map { it.bytes }.toList() shouldBe dummyArrays
+            cache.sendFile(file, 0, 1000, httpResponse)
 
             coVerify(exactly = 1) {
                 s3ClientService.getFile(file.link)
                 diskBackend.storeFromFlow(file, any())
                 fileCacheRepository.addFileToCache(file.fileId)
                 fileCacheRepository.markFileAsUsed(file.fileId)
-                diskBackend.getFileFlow(file)
+                cache.sendFile(file, 0, 1000, httpResponse)
             }
             confirmVerified()
         }
@@ -180,7 +177,7 @@ class CachedS3FileBackendTest : WordSpec({
             val cache = createCache()
 
             downloadFileToCache(file)
-            cache.getFileFlow(file).toList()
+            cache.sendFile(file, 0, 1000, httpResponse)
             clearAllMocks(answers = false)
 
             coEvery {
@@ -203,15 +200,19 @@ class CachedS3FileBackendTest : WordSpec({
             val cache = createCache()
 
             downloadFileToCache(file)
-            cache.getFileFlow(file).toList()
+            cache.sendFile(file, 0, 1000, httpResponse)
             clearAllMocks(answers = false)
 
             val waitUntilDownload = CompletableDeferred(Unit)
+
+            coEvery {
+                diskBackend.sendFile(file, any(), any(), httpResponse)
+            } coAnswers {
+                delay(500)
+            }
+
             val job = launch {
-                cache.getFileFlow(file).collect {
-                    waitUntilDownload.complete(Unit)
-                    delay(50)
-                }
+                cache.sendFile(file, 0, 1000, httpResponse)
             }
 
             coEvery {
@@ -225,7 +226,7 @@ class CachedS3FileBackendTest : WordSpec({
             cache.evictFromCache(file)
             job.join()
             coVerify(exactly = 1) {
-                diskBackend.getFileFlow(file)
+                diskBackend.sendFile(file, 0, 1000, httpResponse)
                 fileCacheRepository.markFileAsUsed(file.fileId)
                 fileCacheRepository.removeFilesFromCache(listOf(file.fileId))
                 diskBackend.delete(file)
