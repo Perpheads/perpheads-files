@@ -106,7 +106,7 @@ class CachedS3FileBackendTest : WordSpec({
             downloadFileToCache(file)
             val returnedFlow = cache.getFileFlow(file)
 
-            returnedFlow.toList() shouldBe dummyArrays
+            returnedFlow.map { it.bytes }.toList() shouldBe dummyArrays
 
             coVerify(exactly = 1) {
                 s3ClientService.getFile(file.link)
@@ -127,7 +127,7 @@ class CachedS3FileBackendTest : WordSpec({
             clearAllMocks(answers = false)
 
             val returnedFlow = cache.getFileFlow(file)
-            returnedFlow.toList() shouldBe dummyArrays
+            returnedFlow.map { it.bytes }.toList() shouldBe dummyArrays
             coVerify(exactly = 1) {
                 diskBackend.getFileFlow(file)
                 fileCacheRepository.markFileAsUsed(file.fileId)
@@ -154,7 +154,7 @@ class CachedS3FileBackendTest : WordSpec({
             clearAllMocks(answers = false)
 
             val returnedFlow = cache.getFileFlow(file)
-            returnedFlow.toList() shouldBe dummyArrays
+            returnedFlow.map { it.bytes }.toList() shouldBe dummyArrays
 
             coVerify(exactly = 1) {
                 s3ClientService.getFile(file.link)
