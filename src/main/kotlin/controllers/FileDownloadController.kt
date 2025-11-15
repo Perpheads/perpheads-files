@@ -63,10 +63,10 @@ class FileDownloadController(
 
     private fun FileData.getHeaders(rangeHeader: String?): Map<String, String> = buildMap {
         val range = getRangeHeaderRange(rangeHeader)
-        put("Content-Length", range?.let { it.last - it.first }?.toString() ?: this@getHeaders.size.toString())
+        put("Content-Length", range?.contentLength()?.toString() ?: this@getHeaders.size.toString())
         put("Content-Type", getSafeContentType())
-        rangeHeader?.let {
-            put("Content-Range", "$rangeHeader/${this@getHeaders.size}")
+        range?.let {
+            put("Content-Range", range.toHeader())
         }
         put("Accept-Ranges", "bytes")
         put("Cache-Control", getCacheHeader())
@@ -83,7 +83,10 @@ class FileDownloadController(
     ): Uni<Response> = suspending {
         val fileData = fileRepository.findByLink(link) ?: throw NotFoundException()
 
-        Response.ok().apply {
+        val rangeData = fileData.getRangeHeaderRange(rangeHeader)
+        val status = if (rangeData != null) 206 else 200
+
+        Response.status(status).apply {
             fileData.getHeaders(rangeHeader).forEach {
                 header(it.key, it.value)
             }
@@ -92,16 +95,37 @@ class FileDownloadController(
 
     private val rangeRegex = Regex("bytes=(\\d*)-?(\\d*)")
 
-    private fun FileData.getRangeHeaderRange(rangeHeader: String?): LongRange? {
+    private class RangeHeaderData(private val start: Long?, private val end: Long?, private val fileData: FileData) {
+        fun isValid(): Boolean {
+            return (start == null || start in 0..<fileData.size) &&
+                    (end == null || end in 0..<fileData.size) &&
+                    (start == null || end == null || start <= end)
+        }
+
+        fun start(): Long = start ?: 0
+
+        fun end(): Long = end ?: (fileData.size - 1)
+
+        fun endExclusive(): Long = end?.let { it + 1 } ?: fileData.size
+
+        fun contentLength(): Long {
+            return endExclusive() - start()
+        }
+
+        fun toHeader(): String {
+            return "bytes ${start()}-${end()}/${fileData.size}"
+        }
+    }
+
+    private fun FileData.getRangeHeaderRange(rangeHeader: String?): RangeHeaderData? {
         if (rangeHeader == null) return null
         val match = rangeRegex.matchEntire(rangeHeader) ?: return null
         val start = match.groupValues[1].toLongOrNull()
         val end = match.groupValues[2].toLongOrNull()
         if (start == null && end == null) return null
-        val range = (start?.coerceAtLeast(0) ?: 0) .. (end?.coerceAtMost(size) ?: size)
-        if (range.isEmpty()) return null
+        val data = RangeHeaderData(start, end, this)
 
-        return range
+        return data.takeIf { it.isValid() }
     }
 
     @GET
@@ -125,7 +149,7 @@ class FileDownloadController(
             response.statusCode = 200
         }
 
-        fileBackend.sendFile(fileData, range?.start ?: 0L, (range?.last ?: fileData.size), response)
+        fileBackend.sendFile(fileData, range?.start() ?: 0L, range?.endExclusive() ?: fileData.size, response)
     }
 
     @GET
