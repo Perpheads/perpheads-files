@@ -69,6 +69,7 @@ export class WebSocketSender {
     }
 
     private sendNext(count: number) {
+        if (this.finalCallbackCalled) return
         if (this.sentSize >= this.file.size) return
         if (this.sentSize === 0) {
             this.onProgress(0)

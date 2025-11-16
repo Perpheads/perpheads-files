@@ -22,6 +22,7 @@ class ShareService {
     companion object {
         const val CHUNK_SIZE = 65000
         const val MAX_CHUNKS_IN_FLIGHT = 100
+        const val CHUNK_REQUEST_AMOUNT = 20
         private val LOG = Logger.getLogger(ShareService::class.java.name)
     }
 
@@ -85,10 +86,13 @@ class ShareService {
         pull(connectionId, MAX_CHUNKS_IN_FLIGHT)
 
         try {
+            var chunkCounter = 0L
             downloadingSessionData.queued.consumeEach { chunk ->
                 LOG.debug("Sending chunk to client")
                 emit(chunk)
-                pull(connectionId, count = 1)
+                if (chunkCounter++ % CHUNK_REQUEST_AMOUNT == 0L) {
+                    pull(connectionId, count = CHUNK_REQUEST_AMOUNT)
+                }
             }
         } catch (_: Exception) {
             connections.findByConnectionId(connectionId).getOrNull()?.close()?.awaitSuspending()
