@@ -25,7 +25,7 @@ export const FileTransferPage = () => {
     const [websocketSender, setWebsocketSender] = useState<WebSocketSender | null>(null)
 
     useEffect(() => {
-        if (!completed && createdLink) {
+        if (!completed && createdLink && !error) {
             window.onbeforeunload = preventPageClose
         }
 
@@ -33,7 +33,13 @@ export const FileTransferPage = () => {
             if (window.onbeforeunload !== preventPageClose) return
             window.onbeforeunload = null
         }
-    }, [createdLink, completed])
+    }, [createdLink, completed, error])
+
+    useEffect(() => {
+        return () => {
+            websocketSender?.close()
+        }
+    }, [websocketSender])
 
     const updateSenderCallbacks = () => {
         if (!websocketSender) return

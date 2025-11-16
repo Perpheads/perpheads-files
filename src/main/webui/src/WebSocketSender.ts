@@ -88,10 +88,6 @@ export class WebSocketSender {
                         type: "completed"
                     })
                 )
-                if (!this.finalCallbackCalled) {
-                    this.onCompleted()
-                    this.finalCallbackCalled = true
-                }
                 break
             }
         }

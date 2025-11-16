@@ -15,7 +15,7 @@ import {
 import {SearchBar, SearchIconWrapper, StyledInputBase} from "./SearchBar";
 import SearchIcon from '@mui/icons-material/Search';
 import {AccountResponse, useUser} from "../hooks/useUser";
-import {PropsWithChildren, useState} from "react";
+import {PropsWithChildren, useEffect, useState} from "react";
 import {MoreVert} from "@mui/icons-material";
 import {useNavigate} from "react-router-dom";
 import {ApiKeyDialog} from "./ApiKeyDialog";
@@ -107,6 +107,12 @@ export const Page = (props: PageProps) => {
     const [currentAlert, setCurrentAlert] = useState<AlertData | null>(null)
     const [alertOpen, setAlertOpen] = useState<boolean>(false)
 
+    useEffect(() => {
+        if (props.currentAlert) {
+            setAlertOpen(true)
+        }
+    }, [props.currentAlert])
+
     const doLogout = () => {
         window.location.href = "/api/user/logout"
     }
@@ -131,6 +137,8 @@ export const Page = (props: PageProps) => {
                                onCreateAccountSelected={() => setCurrentDialog("create_account")}
                                user={user.user}/>
     }
+
+    const alertToUse = props.currentAlert ?? currentAlert
 
     return <Box sx={{display: "flex", flexDirection: "column"}}>
         <CssBaseline/>
@@ -172,14 +180,14 @@ export const Page = (props: PageProps) => {
             }
             setAlertOpen(false)
         }}>
-            {currentAlert ?
+            {(alertToUse) ?
                 <Alert onClose={() => {
                     if (props.onAlertHidden) {
                         props.onAlertHidden()
                     }
                     setAlertOpen(false)
-                }} sx={{width: "100%"}} severity={currentAlert.color}>
-                    {currentAlert.message}
+                }} sx={{width: "100%"}} severity={alertToUse.color}>
+                    {alertToUse.message}
                 </Alert> : <Alert/>
             }
         </Snackbar>

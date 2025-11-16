@@ -3,14 +3,8 @@ package com.perpheads.files.controllers
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.perpheads.files.services.ShareService
 import com.perpheads.files.suspending
-import io.quarkus.websockets.next.OnBinaryMessage
-import io.quarkus.websockets.next.OnClose
-import io.quarkus.websockets.next.OnOpen
-import io.quarkus.websockets.next.OnTextMessage
-import io.quarkus.websockets.next.WebSocket
-import io.quarkus.websockets.next.WebSocketConnection
+import io.quarkus.websockets.next.*
 import io.smallrye.mutiny.Uni
-import io.smallrye.mutiny.coroutines.awaitSuspending
 import jakarta.annotation.security.RolesAllowed
 import jakarta.enterprise.context.RequestScoped
 import org.jboss.logging.Logger
@@ -52,7 +46,6 @@ class ShareWebSocket(
         } else if (type == "completed") {
             LOG.info("File share upload completed for ${webSocketConnection.id()}")
             shareService.closeSession(webSocketConnection.id(), true)
-            webSocketConnection.close().awaitSuspending()
             CompletedResponse
         } else {
             ErrorMessage("Unknown message type")
