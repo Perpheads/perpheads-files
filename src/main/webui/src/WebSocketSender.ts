@@ -7,6 +7,7 @@ export class WebSocketSender {
     private finalCallbackCalled: boolean = false
     private sentSize: number = 0
     private file: File
+    private completed: boolean = false
 
     onProgress: (progress: number) => void = () => {
     }
@@ -36,8 +37,11 @@ export class WebSocketSender {
         }
         this.socket.onclose = () => {
             if (this.finalCallbackCalled) return
-            this.finalCallbackCalled = true
-            this.onError("The connection was interrupted (The user probably stopped the download)")
+            if (this.completed) {
+                this.onCompleted()
+            } else {
+                this.onError("The connection was interrupted (The user probably stopped the download)")
+            }
         }
         this.socket.onmessage = (e: MessageEvent) => {
             const message = JSON.parse(e.data)
@@ -52,12 +56,10 @@ export class WebSocketSender {
                 if (!this.finalCallbackCalled) {
                     this.finalCallbackCalled = true
                     this.onError(message.error)
+                    this.close()
                 }
             } else if (message.type === "completed") {
-                if (!this.finalCallbackCalled) {
-                    this.finalCallbackCalled = true
-                    this.onCompleted()
-                }
+                this.completed = true
                 this.close()
             }
         }

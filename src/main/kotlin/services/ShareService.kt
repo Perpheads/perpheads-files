@@ -21,7 +21,7 @@ import kotlin.jvm.optionals.getOrNull
 class ShareService {
     companion object {
         const val CHUNK_SIZE = 65000
-        const val MAX_CHUNKS_IN_FLIGHT = 100
+        const val MAX_CHUNKS_IN_FLIGHT = 200
         const val CHUNK_REQUEST_AMOUNT = 20
         private val LOG = Logger.getLogger(ShareService::class.java.name)
     }
