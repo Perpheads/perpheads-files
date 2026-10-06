@@ -157,7 +157,7 @@ export const AccountPage = () => {
 
     return <Page title={title} searchBarEnabled={true} onSearchChanged={(newSearch) => {
         changeUrl(1, newSearch)
-    }} currentAlert={alert} paperProps={{
+    }} currentAlert={alert} onAlertHidden={() => setAlert(undefined)} paperProps={{
         elevation: draggedOver ? 4 : undefined,
         onDragOver: e => {
             e.preventDefault()
