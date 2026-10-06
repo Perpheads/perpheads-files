@@ -48,6 +48,7 @@ class CachedS3FileBackendTest : WordSpec({
         fileId = fileCounter++,
         link = "sometext$fileCounter",
         filename = "testing",
+        storageName = "stored$fileCounter",
         mimeType = "image/jpeg",
         userId = 1,
         uploadDate = Instant.now(),
@@ -73,7 +74,7 @@ class CachedS3FileBackendTest : WordSpec({
         } just runs
 
         coEvery {
-            s3ClientService.getFile(file.link)
+            s3ClientService.getFile(file.storageName)
         } coAnswers {
             coEvery {
                 diskBackend.sendFile(file, any(), any(), httpResponse)
@@ -91,7 +92,7 @@ class CachedS3FileBackendTest : WordSpec({
             cache.sendFile(file, 0, 100, httpResponse)
 
             coVerify(exactly = 1) {
-                s3ClientService.getFile(file.link)
+                s3ClientService.getFile(file.storageName)
                 diskBackend.storeFromFlow(file, any())
                 fileCacheRepository.addFileToCache(file.fileId)
                 fileCacheRepository.markFileAsUsed(file.fileId)
@@ -108,7 +109,7 @@ class CachedS3FileBackendTest : WordSpec({
             cache.sendFile(file, 500, 1000, httpResponse)
 
             coVerify(exactly = 1) {
-                s3ClientService.getFile(file.link)
+                s3ClientService.getFile(file.storageName)
                 diskBackend.storeFromFlow(file, any())
                 fileCacheRepository.addFileToCache(file.fileId)
                 fileCacheRepository.markFileAsUsed(file.fileId)
@@ -154,7 +155,7 @@ class CachedS3FileBackendTest : WordSpec({
             cache.sendFile(file, 0, 1000, httpResponse)
 
             coVerify(exactly = 1) {
-                s3ClientService.getFile(file.link)
+                s3ClientService.getFile(file.storageName)
                 diskBackend.storeFromFlow(file, any())
                 fileCacheRepository.addFileToCache(file.fileId)
                 fileCacheRepository.markFileAsUsed(file.fileId)
