@@ -16,7 +16,10 @@ import jakarta.ws.rs.Consumes
 import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.core.MediaType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.jboss.resteasy.reactive.RestForm
 import org.jboss.resteasy.reactive.multipart.FileUpload
@@ -80,6 +83,10 @@ class UploadController(
             val thumbnail = outputArrStream.toByteArray()
 
             fileRepository.createThumbnail(fileId, thumbnail)
+        }.onFailure {
+            if (it is CancellationException) {
+                currentCoroutineContext().ensureActive()
+            }
         }
     }
 
@@ -110,6 +117,7 @@ class UploadController(
                 fileId = -1,
                 link = link,
                 filename = filename,
+                storageName = link,
                 mimeType = mimeType,
                 userId = user.userId,
                 uploadDate = Instant.now(),

@@ -7,16 +7,19 @@ import com.perpheads.files.data.FileUserStatistics
 import com.perpheads.files.db.tables.references.FILE
 import com.perpheads.files.db.tables.references.FILE_THUMBNAIL
 import com.perpheads.files.db.tables.references.USER
+import com.perpheads.files.utils.alphaNumeric
 import com.perpheads.files.utils.awaitFlow
 import jakarta.enterprise.context.ApplicationScoped
 import kotlinx.coroutines.reactive.awaitFirst
 import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactive.awaitSingle
 import org.jooq.impl.DSL
+import java.security.SecureRandom
 
 
 @ApplicationScoped
 class FileRepository : AbstractRepository() {
+    private val secureRandom = SecureRandom()
 
     suspend fun createThumbnail(fileId: Int, thumbnail: ByteArray) {
         dsl().insertInto(FILE_THUMBNAIL)
@@ -30,6 +33,33 @@ class FileRepository : AbstractRepository() {
             .set(FILE.FILENAME, name)
             .where(FILE.FILE_ID.eq(fileId))
             .awaitSingle()
+    }
+
+    private fun newLink(currentLink: String): String = secureRandom.alphaNumeric(16) + currentLink.drop(16)
+
+    suspend fun regenerateLink(file: FileData): String {
+        val link = newLink(file.link)
+        dsl().update(FILE)
+            .set(FILE.LINK, link)
+            .where(FILE.FILE_ID.eq(file.fileId))
+            .awaitSingle()
+        return link
+    }
+
+    suspend fun regenerateAllLinks(): Int = withTransaction {
+        val files = dsl().select(FILE.FILE_ID, FILE.LINK)
+            .from(FILE)
+            .awaitFlow { it[FILE.FILE_ID]!! to it[FILE.LINK]!! }
+        for (chunk in files.chunked(1000)) {
+            val newLinks = DSL.values(*chunk.map { (fileId, link) -> DSL.row(fileId, newLink(link)) }.toTypedArray())
+                .`as`("new_links", "file_id", "link")
+            dsl().update(FILE)
+                .set(FILE.LINK, newLinks.field("link", FILE.LINK.dataType)!!)
+                .from(newLinks)
+                .where(FILE.FILE_ID.eq(newLinks.field("file_id", FILE.FILE_ID.dataType)!!))
+                .awaitSingle()
+        }
+        files.size
     }
 
     suspend fun getThumbnail(

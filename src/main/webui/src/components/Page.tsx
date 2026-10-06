@@ -20,10 +20,12 @@ import {MoreVert} from "@mui/icons-material";
 import {useNavigate} from "react-router-dom";
 import {ApiKeyDialog} from "./ApiKeyDialog";
 import {CreateUserDialog} from "./CreateUserDialog";
+import {RegenerateLinksDialog} from "./RegenerateLinksDialog";
 
 interface SidebarMenuProps {
     onApiKeySelected: () => void
     onCreateAccountSelected: () => void
+    onRegenerateLinksSelected: () => void
     onLogout: () => void
     user: AccountResponse | null
 }
@@ -76,6 +78,12 @@ const SidebarMenu = (props: SidebarMenuProps) => {
                 }}>
                     Statistics
                 </MenuItem>
+                <MenuItem onClick={() => {
+                    setAnchorEl(null)
+                    props.onRegenerateLinksSelected()
+                }}>
+                    Regenerate All Links
+                </MenuItem>
             </>}
             <MenuItem onClick={props.onLogout}>
                 Logout
@@ -84,7 +92,7 @@ const SidebarMenu = (props: SidebarMenuProps) => {
     </>
 }
 
-type CurrentDialog = "api_key" | "create_account"
+type CurrentDialog = "api_key" | "create_account" | "regenerate_links"
 
 export interface AlertData {
     message: string
@@ -135,6 +143,7 @@ export const Page = (props: PageProps) => {
         sideBar = <SidebarMenu onLogout={doLogout}
                                onApiKeySelected={() => setCurrentDialog("api_key")}
                                onCreateAccountSelected={() => setCurrentDialog("create_account")}
+                               onRegenerateLinksSelected={() => setCurrentDialog("regenerate_links")}
                                user={user.user}/>
     }
 
@@ -170,6 +179,10 @@ export const Page = (props: PageProps) => {
                 setAlertOpen(true)
             }}/>}
             {currentDialog === "create_account" && <CreateUserDialog showAlert={(alert) => {
+                setCurrentAlert(alert)
+                setAlertOpen(true)
+            }}/>}
+            {currentDialog === "regenerate_links" && <RegenerateLinksDialog showAlert={(alert) => {
                 setCurrentAlert(alert)
                 setAlertOpen(true)
             }}/>}

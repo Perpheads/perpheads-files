@@ -126,14 +126,14 @@ class CachedS3FileBackend(
                 when (state) {
                     FileState.INITIALIZED -> {
                         // We just created this entry, so we can just mark it as evicted immediately
-                        LOG.info("Attempting to evict ${fileData.link} but it was not present")
+                        LOG.info("Attempting to evict ${fileData.storageName} but it was not present")
                         changeState(FileState.EVICTED)
                         this.removeFromCache()
                         return
                     }
 
                     FileState.EVICTED -> {
-                        LOG.info("Attempting to evict ${fileData.link} but it was already evicted by someone else")
+                        LOG.info("Attempting to evict ${fileData.storageName} but it was already evicted by someone else")
                         // Someone else already finished evicting, we are done
                         this.removeFromCache()
                         return
@@ -145,7 +145,7 @@ class CachedS3FileBackend(
 
                     FileState.ERROR, FileState.IN_CACHE, FileState.EVICTING, FileState.EVICTING_DOWNLOADS_COMPLETED -> {
                         if (readCount == 0) {
-                            LOG.info("File ${fileData.link} is not being read anymore so it can be safely evicted")
+                            LOG.info("File ${fileData.storageName} is not being read anymore so it can be safely evicted")
                             // No readers so we can safely delete the file.
                             changeState(FileState.EVICTED)
                             try {
@@ -158,7 +158,7 @@ class CachedS3FileBackend(
                         } else if (state != FileState.EVICTING) {
                             LOG.debug(
                                 "Attempting to evict file {} but it is in state {}, marking as evicting.",
-                                fileData.link,
+                                fileData.storageName,
                                 state
                             )
                             changeState(FileState.EVICTING)
@@ -179,13 +179,13 @@ class CachedS3FileBackend(
     }
 
     override suspend fun delete(data: FileData): Boolean {
-        val success = s3ClientService.deleteFile(data.link)
+        val success = s3ClientService.deleteFile(data.storageName)
         evictFromCache(data)
         return success
     }
 
     override suspend fun upload(data: FileData, file: File) {
-        s3ClientService.uploadFile(file, data.link, data.mimeType)
+        s3ClientService.uploadFile(file, data.storageName, data.mimeType)
         diskBackend.upload(data, file) // Immediately make it available
         fileCacheRepository.addFileToCache(data.fileId)
         currentCache.compute(data.fileId) { _, existingEntry ->
@@ -196,17 +196,17 @@ class CachedS3FileBackend(
 
     private suspend fun Entry.doDownload() {
         val newState = try {
-            LOG.info("Downloading file ${fileData.link} from S3 into cache")
-            diskBackend.storeFromFlow(fileData, s3ClientService.getFile(fileData.link))
+            LOG.info("Downloading file ${fileData.storageName} from S3 into cache")
+            diskBackend.storeFromFlow(fileData, s3ClientService.getFile(fileData.storageName))
             fileCacheRepository.addFileToCache(fileData.fileId)
             FileState.IN_CACHE
         } catch (e: Exception) {
-            LOG.error("An error occurred downloading ${fileData.link} from S3 into cache", e)
+            LOG.error("An error occurred downloading ${fileData.storageName} from S3 into cache", e)
             FileState.ERROR
         }
         getOrCreateEntryAndRunWithState(fileData) {
             if (state != FileState.DOWNLOADING) {
-                LOG.error("After downloading file ${fileData.link} encountered state $state. This should not be possible.")
+                LOG.error("After downloading file ${fileData.storageName} encountered state $state. This should not be possible.")
                 return@getOrCreateEntryAndRunWithState
             }
             changeState(newState)
@@ -233,7 +233,7 @@ class CachedS3FileBackend(
                         // so it should always be the case.
                         // But we cannot handle downloading here because we need to release the lock while downloading
                         // to allow simultaneous access.
-                        LOG.debug("File ${data.link} is already in cache, marking as used")
+                        LOG.debug("File ${data.storageName} is already in cache, marking as used")
                         fileCacheRepository.markFileAsUsed(data.fileId)
                         lastUsed = Instant.now()
                         readCount++
@@ -259,7 +259,7 @@ class CachedS3FileBackend(
 
             // The file was in cache and can be accessed. Start the download
             try {
-                LOG.debug("Emitting data for ${data.link} from disk cache")
+                LOG.debug("Emitting data for ${data.storageName} from disk cache")
                 diskBackend.sendFile(data, start, end, response)
                 return
             } finally {
@@ -306,7 +306,7 @@ class CachedS3FileBackend(
         coroutineScope {
             entriesToEvict.forEach {
                 launch {
-                    LOG.info("Starting eviction for file ${it.fileData.link}")
+                    LOG.info("Starting eviction for file ${it.fileData.storageName}")
                     evictFromCache(it.fileData)
                 }
             }
@@ -322,7 +322,7 @@ class CachedS3FileBackend(
     fun onStart(@Observes startupEvent: StartupEvent) {
         runBlocking {
             LOG.info("Loading file cache from disk and database")
-            val existingCacheData = fileCacheRepository.getFileCache().associateBy { it.file.link }
+            val existingCacheData = fileCacheRepository.getFileCache().associateBy { it.file.storageName }
             val existingFiles = diskBackend.listFiles().associateBy { it.name }
             val fileIdsToRemoveFromCache = mutableListOf<Int>()
             val filesToKeepInCache = mutableListOf<Entry>()

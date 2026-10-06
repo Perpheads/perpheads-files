@@ -23,7 +23,7 @@ class LocalDiskFileBackend(
     private val vertx: Vertx
 ) : FileBackend {
     private fun FileData.getTargetPath(): Path {
-        return storagePath / link
+        return storagePath / storageName
     }
 
     override suspend fun upload(data: FileData, file: File) {

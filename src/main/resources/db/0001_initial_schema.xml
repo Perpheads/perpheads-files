@@ -83,4 +83,10 @@
             </column>
         </createTable>
     </changeSet>
+    <changeSet id="3" author="Fredy">
+        <addColumn tableName="file">
+            <column name="storage_name" type="varchar(30)" valueComputed="link"/>
+        </addColumn>
+        <addNotNullConstraint tableName="file" columnName="storage_name" columnDataType="varchar(30)"/>
+    </changeSet>
 </databaseChangeLog>

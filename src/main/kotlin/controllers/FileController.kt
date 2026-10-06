@@ -16,9 +16,9 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 import jakarta.ws.rs.*
 import jakarta.ws.rs.core.Response
+import org.jboss.logging.Logger
 import kotlin.math.ceil
 import kotlin.math.max
-import kotlin.math.min
 
 @ApplicationScoped
 @Path("/api/file")
@@ -27,6 +27,10 @@ class FileController(
     private val fileRepository: FileRepository,
     private val fileBackend: CachedS3FileBackend,
 ) {
+    companion object {
+        private val LOG = Logger.getLogger(FileController::class.java.name)
+    }
+
     @Inject
     private lateinit var securityIdentity: CurrentIdentityAssociation
 
@@ -89,6 +93,35 @@ class FileController(
             ?: throw NotFoundException()
 
         fileRepository.rename(file.fileId, filename)
+    }
+
+    class NewLinkResponse(val link: String)
+
+    /** A new link for one of the user's files; the old link stops working */
+    @POST
+    @Path("/{id}/link")
+    fun regenerateLink(
+        @PathParam("id") id: Int,
+    ): Uni<NewLinkResponse> = suspending {
+        val user = securityIdentity.filesUser()
+        val file = fileRepository.findById(id)
+            ?.takeIf { it.userId == user.userId }
+            ?: throw NotFoundException()
+
+        NewLinkResponse(fileRepository.regenerateLink(file))
+    }
+
+    class NewLinksResponse(val fileCount: Int)
+
+    /** New links for all files of all users; every link shared so far stops working */
+    @POST
+    @Path("/regenerate-all-links")
+    @RolesAllowed("admin")
+    fun regenerateAllLinks(): Uni<NewLinksResponse> = suspending {
+        val user = securityIdentity.filesUser()
+        val fileCount = fileRepository.regenerateAllLinks()
+        LOG.info("${user.name} gave all $fileCount files new links")
+        NewLinksResponse(fileCount)
     }
 
     class FileStatisticsResponse(

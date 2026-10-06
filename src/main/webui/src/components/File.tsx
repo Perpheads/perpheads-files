@@ -1,5 +1,5 @@
-import {DeleteOutline, Edit} from "@mui/icons-material";
-import {Box, IconButton, Link, TableCell, TableRow, TextField} from "@mui/material";
+import {Autorenew, DeleteOutline, Edit} from "@mui/icons-material";
+import {Box, IconButton, Link, TableCell, TableRow, TextField, Tooltip} from "@mui/material";
 import {useState} from "react";
 import {FileResponse} from "../data/FileResponse";
 import {humanReadableByteSize} from "../util";
@@ -8,6 +8,7 @@ interface FileProps {
     file: FileResponse
     deleteFile: (file: FileResponse) => void
     renameFile: (file: FileResponse, newName: string) => void
+    regenerateLink: (file: FileResponse) => void
     showDetails: boolean
 }
 
@@ -84,6 +85,11 @@ export const File = (props: FileProps) => {
                 }}>
                     <Edit/>
                 </IconButton>
+                <Tooltip title="New link">
+                    <IconButton size="small" color="info" onClick={() => props.regenerateLink(props.file)}>
+                        <Autorenew/>
+                    </IconButton>
+                </Tooltip>
                 <IconButton size="small" color="error" onClick={() => {
                     props.deleteFile(props.file)
                 }}>

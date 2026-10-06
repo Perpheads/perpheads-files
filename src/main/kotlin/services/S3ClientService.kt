@@ -2,6 +2,9 @@ package com.perpheads.files.services
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.NotFoundException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -53,6 +56,10 @@ class S3ClientService(
                     .build(),
                 AsyncResponseTransformer.toPublisher()
             ).await()
+        }.onFailure {
+            if (it is CancellationException) {
+                currentCoroutineContext().ensureActive()
+            }
         }.getOrNull() ?: throw NotFoundException()
 
         emitAll(objectResponse.asFlow().map { it.array() })
@@ -82,6 +89,10 @@ class S3ClientService(
                     .bucket(bucketName)
                     .build()
             ).await()
+        }.onFailure {
+            if (it is CancellationException) {
+                currentCoroutineContext().ensureActive()
+            }
         }.isSuccess
     }
 }

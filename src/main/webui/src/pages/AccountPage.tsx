@@ -1,7 +1,13 @@
 import {useUser} from "../hooks/useUser";
-import {Page} from "../components/Page";
+import {AlertData, Page} from "../components/Page";
 import {useSearchParams} from "react-router-dom";
 import {
+    Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
     Fab, Pagination,
     Table,
     TableBody, TableCell,
@@ -32,6 +38,10 @@ export const AccountPage = () => {
     const search = searchParams.get("search") ?? ""
     const [renameCall, setRenameCall] = useState<ApiCallResponseData | null>(null)
     const [deleteCall, setDeleteCall] = useState<ApiCallResponseData | null>(null)
+    // The file whose new link is being confirmed
+    const [fileForNewLink, setFileForNewLink] = useState<FileResponse | null>(null)
+    const [newLinkCall, setNewLinkCall] = useState<ApiCallResponseData | null>(null)
+    const [alert, setAlert] = useState<AlertData>()
     const [queuedUploads, setQueuedUploads] = useState<QueuedUpload[]>([])
     const [draggedOver, setDraggedOver] = useState<boolean>(false)
     const dragCounter = useRef(0)
@@ -98,6 +108,29 @@ export const AccountPage = () => {
         }
     }, [deleteCall])
 
+    function doRegenerateLink(file: FileResponse) {
+        setFileForNewLink(null)
+        setNewLinkCall(makeApiCall({
+            method: "POST",
+            url: `/api/file/${file.fileId}/link`,
+            onError: () => {
+                setNewLinkCall(null)
+                setAlert({message: "Could not create a new link", color: "error"})
+            },
+            onLoadedCallback: () => {
+                setNewLinkCall(null)
+                setAlert({message: `${file.filename} has a new link, the old one no longer works`, color: "success"})
+                files.refresh()
+            }
+        }))
+    }
+
+    useEffect(() => {
+        return () => {
+            newLinkCall?.cancel()
+        }
+    }, [newLinkCall])
+
     const doUploadFiles = (filesToUpload: FileList) => {
         if (filesToUpload.length === 0) return
         const newQueue = queuedUploads.slice()
@@ -124,7 +157,7 @@ export const AccountPage = () => {
 
     return <Page title={title} searchBarEnabled={true} onSearchChanged={(newSearch) => {
         changeUrl(1, newSearch)
-    }} paperProps={{
+    }} currentAlert={alert} paperProps={{
         elevation: draggedOver ? 4 : undefined,
         onDragOver: e => {
             e.preventDefault()
@@ -168,8 +201,9 @@ export const AccountPage = () => {
                 </TableHead>
                 <TableBody>
                     {files.data?.files.map((file) => (
-                        <File key={file.link} deleteFile={doDelete}
+                        <File key={file.fileId} deleteFile={doDelete}
                               renameFile={doRename}
+                              regenerateLink={setFileForNewLink}
                               showDetails={shouldShowDetails}
                               file={file}
                         />))}
@@ -184,6 +218,22 @@ export const AccountPage = () => {
                     showLastButton={!tinyScreen}
                     page={currentPage}
                     onChange={(_, num) => changeUrl(num, search)}/>
+        <Dialog open={fileForNewLink !== null} onClose={() => setFileForNewLink(null)}>
+            <DialogTitle>New link</DialogTitle>
+            <DialogContent>
+                <DialogContentText>
+                    {fileForNewLink?.filename} gets a new link. The current link stops working immediately,
+                    including wherever it was shared or embedded.
+                </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => setFileForNewLink(null)}>Cancel</Button>
+                <Button color="warning" variant="contained" disabled={newLinkCall !== null}
+                        onClick={() => fileForNewLink && doRegenerateLink(fileForNewLink)}>
+                    New link
+                </Button>
+            </DialogActions>
+        </Dialog>
         {queuedUploads.length > 0 && <UploadQueue entries={queuedUploads} onUploadQueueFinished={() => {
             setQueuedUploads([])
             files.refresh()

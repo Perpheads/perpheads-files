@@ -6,6 +6,7 @@ data class FileData(
     val fileId: Int,
     val link: String,
     val filename: String,
+    val storageName: String,
     val mimeType: String,
     val userId: Int?,
     val uploadDate: Instant,
