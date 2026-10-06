@@ -9,10 +9,8 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.post
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.URLProtocol
-import io.ktor.http.buildUrl
-import io.ktor.http.path
 import io.ktor.serialization.jackson.jackson
 import io.netty.handler.codec.http.HttpHeaderNames
 import io.quarkus.runtime.LaunchMode
@@ -35,6 +33,9 @@ import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.HexFormat
 
+private const val STEAM_OPENID_ENDPOINT = "https://steamcommunity.com/openid/login"
+private const val STEAM_CALLBACK_PATH = "/api/user/steam/steam-callback"
+
 @Path("/api/user/steam")
 class SteamAuthController(
     private val cookieRepository: CookieRepository,
@@ -56,18 +57,20 @@ class SteamAuthController(
         }
     }
 
+    /**
+     * The callback under the address of the request. Steam returns there, and logins are only accepted for exactly
+     * this address. That relies on the Host header being genuine: behind cloudflared only the own hostnames get
+     * through, so the port must not be reachable directly.
+     */
+    private fun steamCallbackUrl(context: RoutingContext): String =
+        context.request().scheme() + "://" + context.request().authority() + STEAM_CALLBACK_PATH
+
     @GET
     @PermitAll
     fun steam(
         @Context context: RoutingContext
     ): Response {
-        context.request().authority()
-        val returnUrl = buildUrl {
-            protocol = URLProtocol.createOrDefault(context.request().scheme())
-            host = context.request().authority().host()
-            port = context.request().authority().port().takeIf { it > 0 } ?: 0
-            path("api", "user", "steam", "steam-callback")
-        }
+        val returnUrl = steamCallbackUrl(context)
         val url = UriBuilder.newInstance()
             .host("steamcommunity.com")
             .scheme("https")
@@ -85,8 +88,22 @@ class SteamAuthController(
             .build()
     }
 
-    suspend fun verifySteamAuthRequest(uriInfo: UriInfo): Long? {
-        val steamIdParam = uriInfo.queryParameters["openid.claimed_id"]?.singleOrNull() ?: return null
+    /**
+     * The community id of the player Steam confirmed the login for, or null if it isn't valid. [expectedReturnUrl] is
+     * the callback the login must have been made for: Steam only confirms that a login is genuine, not for which site,
+     * so a login made on another site (which that site could pass on) must not be accepted here.
+     */
+    suspend fun verifySteamAuthRequest(uriInfo: UriInfo, expectedReturnUrl: String): Long? {
+        val params = uriInfo.queryParameters
+        val steamIdParam = params["openid.claimed_id"]?.singleOrNull() ?: return null
+        if (params.getFirst("openid.mode") != "id_res") return null
+        if (params.getFirst("openid.op_endpoint") != STEAM_OPENID_ENDPOINT) return null
+        if (params.getFirst("openid.return_to") != expectedReturnUrl) return null
+        if (params.getFirst("openid.identity") != steamIdParam) return null
+        // The checked values must be covered by Steam's signature, which check_authentication verifies below
+        val signed = params.getFirst("openid.signed")?.split(',')?.toSet() ?: return null
+        if (!signed.containsAll(listOf("op_endpoint", "return_to", "claimed_id", "identity"))) return null
+
         val steamIdMatch = "https://steamcommunity.com/openid/id/(\\d+)".toRegex().matchEntire(steamIdParam)
         if (steamIdMatch == null || steamIdMatch.groupValues.size != 2) {
             return null
@@ -97,13 +114,19 @@ class SteamAuthController(
             .scheme("https")
             .path("/openid/login").apply {
                 queryParam("openid.ns", "http://specs.openid.net/auth/2.0")
-                for (param in uriInfo.queryParameters) {
+                for (param in params) {
+                    // Sent once each, mode as check_authentication instead of the login's id_res
+                    if (param.key == "openid.ns" || param.key == "openid.mode") continue
                     queryParam(param.key, param.value.firstOrNull() ?: "")
                 }
                 queryParam("openid.mode", "check_authentication")
             }.build()
         val response = httpClient.post(url.toURL())
         if (response.status != HttpStatusCode.OK) {
+            return null
+        }
+        // Steam also answers forged or reused logins with 200, only "is_valid:true" means the login is genuine
+        if (response.bodyAsText().lines().none { it.trim() == "is_valid:true" }) {
             return null
         }
         return communityId
@@ -137,9 +160,10 @@ class SteamAuthController(
     @Path("/steam-callback")
     @PermitAll
     fun steamAuth(
-        @Context uriInfo: UriInfo
+        @Context uriInfo: UriInfo,
+        @Context context: RoutingContext
     ): Uni<Response> = suspending {
-        val communityId = verifySteamAuthRequest(uriInfo) ?: throw UnauthorizedException()
+        val communityId = verifySteamAuthRequest(uriInfo, steamCallbackUrl(context)) ?: throw UnauthorizedException()
 
         if (userRepository.getByCommunityId(communityId) == null) {
             return@suspending Response
