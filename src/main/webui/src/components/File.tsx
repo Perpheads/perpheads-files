@@ -1,4 +1,4 @@
-import {Autorenew, DeleteOutline, Edit} from "@mui/icons-material";
+import {Autorenew, DeleteOutlined, Edit} from "@mui/icons-material";
 import {Box, IconButton, Link, TableCell, TableRow, TextField, Tooltip} from "@mui/material";
 import {useState} from "react";
 import {FileResponse} from "../data/FileResponse";
@@ -93,7 +93,7 @@ export const File = (props: FileProps) => {
                 <IconButton size="small" color="error" onClick={() => {
                     props.deleteFile(props.file)
                 }}>
-                    <DeleteOutline/>
+                    <DeleteOutlined/>
                 </IconButton>
             </Box>
         </TableCell>

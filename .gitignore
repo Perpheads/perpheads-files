@@ -44,3 +44,4 @@ nb-configuration.xml
 
 files/
 node_modules/
+dist/
