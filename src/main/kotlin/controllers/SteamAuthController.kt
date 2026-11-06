@@ -63,7 +63,7 @@ class SteamAuthController(
      * through, so the port must not be reachable directly.
      */
     private fun steamCallbackUrl(context: RoutingContext): String =
-        context.request().scheme() + "://" + context.request().authority() + STEAM_CALLBACK_PATH
+        "${context.request().scheme()}://${context.request().authority()}$STEAM_CALLBACK_PATH"
 
     @GET
     @PermitAll

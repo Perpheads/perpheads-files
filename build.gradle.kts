@@ -1,12 +1,11 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jooq.meta.jaxb.ForcedType
 
 plugins {
-    kotlin("jvm") version "2.2.21"
-    kotlin("plugin.allopen") version "2.2.21"
+    kotlin("jvm") version "2.4.21"
+    kotlin("plugin.allopen") version "2.4.21"
     id("io.quarkus")
-    id("nu.studer.jooq") version "10.1.1"
-    id("io.kotest") version "6.0.0"
+    id("nu.studer.jooq") version "10.2.1"
+    id("io.kotest") version "6.2.6"
 }
 
 repositories {
@@ -14,11 +13,11 @@ repositories {
     mavenLocal()
 }
 
-val quarkusPlatformGroupId: String by project
-val quarkusPlatformArtifactId: String by project
-val quarkusPlatformVersion: String by project
-val ktorVersion: String by project
-val jooqVersion: String by project
+val quarkusPlatformGroupId = providers.gradleProperty("quarkusPlatformGroupId").get()
+val quarkusPlatformArtifactId = providers.gradleProperty("quarkusPlatformArtifactId").get()
+val quarkusPlatformVersion = providers.gradleProperty("quarkusPlatformVersion").get()
+val ktorVersion = providers.gradleProperty("ktorVersion").get()
+val jooqVersion = providers.gradleProperty("jooqVersion").get()
 
 dependencies {
     implementation(enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"))
@@ -32,12 +31,12 @@ dependencies {
     implementation("io.quarkus:quarkus-scheduler")
     implementation("io.quarkus:quarkus-container-image-docker")
     implementation("io.quarkus:quarkus-smallrye-context-propagation")
-    implementation("io.quarkiverse.jooq:quarkus-jooq:2.1.0")
-    implementation("io.quarkiverse.quinoa:quarkus-quinoa:2.6.2")
-    implementation("io.smallrye.reactive:mutiny-kotlin:3.0.0")
+    implementation("io.quarkiverse.jooq:quarkus-jooq:2.2.0")
+    implementation("io.quarkiverse.quinoa:quarkus-quinoa:2.9.3")
+    implementation("io.smallrye.reactive:mutiny-kotlin")
     implementation("io.quarkiverse.amazonservices:quarkus-amazon-s3")
-    implementation("software.amazon.awssdk:netty-nio-client:2.38.2")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation("software.amazon.awssdk:netty-nio-client")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
     implementation("io.quarkus:quarkus-arc")
     implementation("io.ktor:ktor-client-core:${ktorVersion}")
     implementation("io.ktor:ktor-client-okhttp:${ktorVersion}")
@@ -46,12 +45,12 @@ dependencies {
     implementation("io.quarkus:quarkus-websockets-next")
     implementation("org.jooq:jooq-kotlin:${jooqVersion}")
     implementation("org.jooq:jooq-kotlin-coroutines:${jooqVersion}")
-    testImplementation("io.mockk:mockk:1.14.6")
-    testImplementation("io.kotest:kotest-framework-engine:6.0.0")
-    testImplementation("io.kotest:kotest-assertions-core:6.0.0")
-    testImplementation("io.kotest:kotest-runner-junit5:6.0.0")
+    testImplementation("io.mockk:mockk:1.14.11")
+    testImplementation("io.kotest:kotest-framework-engine:6.2.6")
+    testImplementation("io.kotest:kotest-assertions-core:6.2.6")
+    testImplementation("io.kotest:kotest-runner-junit5:6.2.6")
     jooqGenerator("org.jooq:jooq-meta-extensions-liquibase:$jooqVersion")
-    testImplementation("io.quarkus:quarkus-junit5")
+    testImplementation("io.quarkus:quarkus-junit")
 }
 
 group = "com.perpheads"
@@ -70,15 +69,11 @@ allOpen {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
         javaParameters = true
     }
-}
-val compileKotlin: KotlinCompile by tasks
-compileKotlin.compilerOptions {
-    freeCompilerArgs.set(listOf("-Xannotation-default-target=param-property"))
 }
 
 

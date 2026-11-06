@@ -106,7 +106,7 @@ class UploadController(
     ): Uni<FileUploadResponse> = suspending {
         val user = securityIdentity.filesUser()
         val file = fileUpload.uploadedFile().toFile()
-        val filename = fileUpload.fileName()
+        val filename = fileUpload.fileName() ?: throw BadRequestException()
         if (!validateFilename(filename)) {
             throw BadRequestException()
         }
