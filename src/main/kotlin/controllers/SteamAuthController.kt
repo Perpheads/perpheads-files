@@ -1,5 +1,6 @@
 package com.perpheads.files.controllers
 
+
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.perpheads.files.repository.CookieRepository
 import com.perpheads.files.repository.UserRepository
@@ -18,6 +19,7 @@ import io.quarkus.security.UnauthorizedException
 import io.smallrye.mutiny.Uni
 import io.vertx.ext.web.RoutingContext
 import jakarta.annotation.security.PermitAll
+import jakarta.ws.rs.CookieParam
 import jakarta.ws.rs.GET
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.QueryParam
@@ -35,6 +37,7 @@ import java.util.HexFormat
 
 private const val STEAM_OPENID_ENDPOINT = "https://steamcommunity.com/openid/login"
 private const val STEAM_CALLBACK_PATH = "/api/user/steam/steam-callback"
+private const val LOGIN_STATE_COOKIE = "steam_login_state"
 
 @Path("/api/user/steam")
 class SteamAuthController(
@@ -65,25 +68,43 @@ class SteamAuthController(
     private fun steamCallbackUrl(context: RoutingContext): String =
         "${context.request().scheme()}://${context.request().authority()}$STEAM_CALLBACK_PATH"
 
+    private fun randomToken(): String {
+        val arr = ByteArray(32)
+        secureRandom.nextBytes(arr)
+        return HexFormat.of().formatHex(arr)
+    }
+
+    // Lax instead of Strict, so the cookie is sent on the cross-site redirect back from Steam
+    private fun loginStateCookie(value: String, maxAge: Int): NewCookie = NewCookie.Builder(LOGIN_STATE_COOKIE)
+        .sameSite(NewCookie.SameSite.LAX)
+        .secure(LaunchMode.current() != LaunchMode.DEVELOPMENT)
+        .httpOnly(true)
+        .path(STEAM_CALLBACK_PATH)
+        .value(value)
+        .maxAge(maxAge)
+        .build()
+
     @GET
     @PermitAll
     fun steam(
         @Context context: RoutingContext
     ): Response {
-        val returnUrl = steamCallbackUrl(context)
+        val callbackUrl = steamCallbackUrl(context)
+        val state = randomToken()
         val url = UriBuilder.newInstance()
             .host("steamcommunity.com")
             .scheme("https")
             .path("/openid/login").apply {
                 queryParam("openid.ns", "http://specs.openid.net/auth/2.0")
                 queryParam("openid.mode", "checkid_setup")
-                queryParam("openid.return_to", returnUrl)
-                queryParam("openid.realm", returnUrl)
+                queryParam("openid.return_to", "$callbackUrl?state=$state")
+                queryParam("openid.realm", callbackUrl)
                 queryParam("openid.identity", "http://specs.openid.net/auth/2.0/identifier_select")
                 queryParam("openid.claimed_id", "http://specs.openid.net/auth/2.0/identifier_select")
             }.build()
 
         return Response.status(HttpStatusCode.Found.value)
+            .cookie(loginStateCookie(state, Duration.ofMinutes(10).toSeconds().toInt()))
             .header(HttpHeaderNames.LOCATION.toString(), url)
             .build()
     }
@@ -102,7 +123,7 @@ class SteamAuthController(
         if (params.getFirst("openid.identity") != steamIdParam) return null
         // The checked values must be covered by Steam's signature, which check_authentication verifies below
         val signed = params.getFirst("openid.signed")?.split(',')?.toSet() ?: return null
-        if (!signed.containsAll(listOf("op_endpoint", "return_to", "claimed_id", "identity"))) return null
+        if (!signed.containsAll(listOf("op_endpoint", "return_to", "response_nonce", "claimed_id", "identity"))) return null
 
         val steamIdMatch = "https://steamcommunity.com/openid/id/(\\d+)".toRegex().matchEntire(steamIdParam)
         if (steamIdMatch == null || steamIdMatch.groupValues.size != 2) {
@@ -114,10 +135,11 @@ class SteamAuthController(
             .scheme("https")
             .path("/openid/login").apply {
                 queryParam("openid.ns", "http://specs.openid.net/auth/2.0")
-                for (param in params) {
-                    // Sent once each, mode as check_authentication instead of the login's id_res
-                    if (param.key == "openid.ns" || param.key == "openid.mode") continue
-                    queryParam(param.key, param.value.firstOrNull() ?: "")
+                for ((key, value) in params) {
+                    // Our own params (e.g. state) are part of return_to and must not be sent to Steam; ns and mode are
+                    // sent once each, mode as check_authentication instead of the login's id_res
+                    if (!key.startsWith("openid.") || key == "openid.ns" || key == "openid.mode") continue
+                    queryParam(key, value.firstOrNull() ?: "")
                 }
                 queryParam("openid.mode", "check_authentication")
             }.build()
@@ -135,9 +157,7 @@ class SteamAuthController(
     private suspend fun createCookie(communityId: Long, expiry: Instant): String? {
         val user = userRepository.getByCommunityId(communityId) ?: return null
 
-        val arr = ByteArray(32)
-        secureRandom.nextBytes(arr)
-        val token = HexFormat.of().formatHex(arr)
+        val token = randomToken()
         cookieRepository.create(token, user.userId, expiry)
         return token
     }
@@ -161,9 +181,14 @@ class SteamAuthController(
     @PermitAll
     fun steamAuth(
         @Context uriInfo: UriInfo,
-        @Context context: RoutingContext
+        @Context context: RoutingContext,
+        @QueryParam("state") state: String?,
+        @CookieParam(LOGIN_STATE_COOKIE) expectedState: String?,
     ): Uni<Response> = suspending {
-        val communityId = verifySteamAuthRequest(uriInfo, steamCallbackUrl(context)) ?: throw UnauthorizedException()
+        // The state binds the callback to the browser that started the login, see steam()
+        if (state == null || state != expectedState) throw UnauthorizedException()
+        val communityId = verifySteamAuthRequest(uriInfo, "${steamCallbackUrl(context)}?state=$state")
+            ?: throw UnauthorizedException()
 
         if (userRepository.getByCommunityId(communityId) == null) {
             return@suspending Response
@@ -179,7 +204,7 @@ class SteamAuthController(
         Response
             .status(HttpStatusCode.Found.value)
             .header(HttpHeaderNames.LOCATION.toString(), newUri)
-            .cookie(cookie)
+            .cookie(cookie, loginStateCookie("", 0))
             .build()
     }
 }
